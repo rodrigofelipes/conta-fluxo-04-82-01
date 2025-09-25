@@ -1,0 +1,168 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    /* Brand tokens */
+    --brand: 223 71% 45%;
+    --brand-2: 198 93% 60%;
+    --brand-3: 262 83% 58%;
+
+    --primary: var(--brand);
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --priority-medium: 45 93% 47%;
+    --priority-medium-foreground: 0 0% 100%;
+    --priority-low: 142 76% 36%;
+    --priority-low-foreground: 0 0% 100%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: var(--brand);
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: var(--brand);
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+
+  /* Gradients & shadows */
+  --gradient-primary: linear-gradient(135deg, hsl(223 71% 45%) 0%, hsl(198 93% 60%) 40%, hsl(223 71% 45%) 80%, hsl(262 83% 58%) 100%);
+  --gradient-subtle: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(0 0% 98%) 100%);
+  --gradient-support: linear-gradient(135deg, hsl(223 71% 45%) 0%, hsl(198 93% 60%) 70%, hsl(262 83% 58%) 100%);
+  --shadow-elevated: 0 10px 30px -10px hsl(var(--brand) / 0.25);
+  --shadow-glow: 0 0 40px hsl(var(--brand-2) / 0.35);
+  --shadow-message: 0 4px 12px -4px hsl(var(--brand) / 0.15);
+  }
+
+  .dark {
+    --background: 220 13% 18%;
+    --foreground: 41 20% 92%;
+
+    --card: 220 14% 22%;
+    --card-foreground: 41 15% 88%;
+
+    --popover: 220 14% 22%;
+    --popover-foreground: 41 15% 88%;
+
+    --primary: var(--brand);
+    --primary-foreground: 220 15% 15%;
+
+    --secondary: 220 12% 25%;
+    --secondary-foreground: 41 15% 85%;
+
+    --muted: 220 10% 28%;
+    --muted-foreground: 41 8% 65%;
+
+    --accent: 220 12% 32%;
+    --accent-foreground: 41 15% 88%;
+
+    --destructive: 0 75% 55%;
+    --destructive-foreground: 210 20% 95%;
+
+    --priority-medium: 45 93% 47%;
+    --priority-medium-foreground: 0 0% 100%;
+    --priority-low: 142 76% 36%;
+    --priority-low-foreground: 0 0% 100%;
+
+    --border: 220 15% 35%;
+    --input: 220 12% 30%;
+    --ring: var(--brand);
+    --sidebar-background: 220 12% 20%;
+    --sidebar-foreground: 41 15% 85%;
+    --sidebar-primary: var(--brand);
+    --sidebar-primary-foreground: 220 15% 15%;
+    --sidebar-accent: 220 12% 28%;
+    --sidebar-accent-foreground: 41 15% 88%;
+    --sidebar-border: 220 15% 32%;
+    --sidebar-ring: var(--brand);
+
+    --custom-bg: 220 13% 18%;
+
+    --gradient-primary: linear-gradient(135deg, hsl(var(--brand)) 0%, hsl(var(--brand-2)) 40%, hsl(var(--brand)) 80%, hsl(var(--brand-3)) 100%);
+    --gradient-subtle: linear-gradient(180deg, hsl(220 13% 18%) 0%, hsl(220 14% 22%) 100%);
+    --gradient-support: linear-gradient(135deg, hsl(var(--brand)) 0%, hsl(var(--brand-2)) 70%, hsl(var(--brand-3)) 100%);
+  }
+}
+
+
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  }
+}
+
+@layer components {
+  .card-elevated { box-shadow: var(--shadow-elevated); }
+  .glow { box-shadow: var(--shadow-glow); }
+  .bg-app-gradient { background-image: var(--gradient-subtle); }
+  .btn-hero { background-image: var(--gradient-primary); color: hsl(var(--primary-foreground)); border: 1px solid hsl(var(--ring) / 0.2); animation: gradient-pan 12s ease-in-out infinite; background-size: 200% 200%; }
+  .btn-hero-static { background-image: var(--gradient-primary); color: hsl(var(--primary-foreground)); border: 1px solid hsl(var(--ring) / 0.2); }
+  .btn-soft { background-color: hsl(var(--secondary)); color: hsl(var(--secondary-foreground)); border: 1px solid hsl(var(--border)); }
+  .support-header { background: var(--gradient-support); }
+  .contact-item { }
+  .pulse-dot { animation: pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+}
+
+@layer utilities {
+  .animate-gradient-pan { animation: gradient-pan 12s ease-in-out infinite; background-size: 200% 200%; }
+}
+
+@keyframes gradient-pan {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes bounce-in {
+  0% { transform: scale(0.9); opacity: 0; }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); opacity: 1; }
+}
