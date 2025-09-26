@@ -11,6 +11,8 @@ const corsHeaders = {
 const WHATSAPP_ACCESS_TOKEN = Deno.env.get('WHATSAPP_ACCESS_TOKEN');
 const WHATSAPP_VERIFY_TOKEN = Deno.env.get('WHATSAPP_VERIFY_TOKEN');
 const WHATSAPP_PHONE_NUMBER_ID = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID');
+const WHATSAPP_DISPLAY_PHONE_NUMBER =
+  Deno.env.get('WHATSAPP_DISPLAY_PHONE_NUMBER') || '+5531998813479';
 
 // Cliente Supabase
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -160,7 +162,7 @@ async function manageConversation(phoneNumber: string, message: string, webhookD
         .insert({
           conversation_id: conversationId,
           admin_id: null,
-          from_phone: phoneNumberIdFromWebhook || WHATSAPP_PHONE_NUMBER_ID,
+          from_phone: WHATSAPP_DISPLAY_PHONE_NUMBER,
           to_phone: phoneNumber,
           content: `[MENU INICIAL] ${MENU_MESSAGE}`,
           direction: 'outbound',
@@ -188,7 +190,7 @@ async function manageConversation(phoneNumber: string, message: string, webhookD
           .insert({
             conversation_id: existingConversation.id,
             admin_id: null,
-            from_phone: phoneNumberIdFromWebhook || WHATSAPP_PHONE_NUMBER_ID,
+            from_phone: WHATSAPP_DISPLAY_PHONE_NUMBER,
             to_phone: phoneNumber,
             content: `[OPÇÃO INVÁLIDA] ${invalidMessage}`,
             direction: 'outbound',

@@ -10,6 +10,8 @@ const corsHeaders = {
 // Configurações do WhatsApp Business API
 const WHATSAPP_ACCESS_TOKEN = Deno.env.get('WHATSAPP_ACCESS_TOKEN');
 const WHATSAPP_PHONE_NUMBER_ID = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID');
+const WHATSAPP_DISPLAY_PHONE_NUMBER =
+  Deno.env.get('WHATSAPP_DISPLAY_PHONE_NUMBER') || '+5531998813479';
 
 // Cliente Supabase
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -364,7 +366,7 @@ serve(async (req) => {
       const { error: dbError } = await supabase.from('whatsapp_messages').insert({
         conversation_id: conversationId,
         admin_id: adminId,
-        from_phone: '+55 31 9670-7584', // Número de exibição do WhatsApp Business
+        from_phone: WHATSAPP_DISPLAY_PHONE_NUMBER, // Número de exibição do WhatsApp Business
         to_phone: to,
         content: message,
         direction: 'outbound',
