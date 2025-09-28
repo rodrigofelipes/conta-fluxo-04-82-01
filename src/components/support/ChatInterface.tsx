@@ -14,7 +14,8 @@ import {
   Mic,
   Loader2,
   FileText,
-  Download
+
+
 } from 'lucide-react';
 import {
   SupportClient,
@@ -22,7 +23,7 @@ import {
   SupportMessageContent
 } from '@/hooks/useSupportChat';
 import { useAuth } from '@/state/auth';
-import { formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow, isSameDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -52,6 +53,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingIntervalRef = useRef<number | null>(null);
   const recordingChunksRef = useRef<Blob[]>([]);
+
+
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -129,11 +132,13 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       if (uploadError) throw uploadError;
 
+
       const { data: publicUrlData } = supabase.storage
         .from('support-files')
         .getPublicUrl(filePath);
 
       
+
 
       const payload: SupportMessageContent =
         type === 'file'
@@ -311,7 +316,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         );
       default:
         return (
+
           <p className="text-sm whitespace-pre-wrap break-words">
+
             {message.content.text}
           </p>
         );
@@ -333,48 +340,84 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   return (
     <>
       {/* Cabeçalho do Chat */}
-      <CardHeader className="pb-3 border-b border-primary/20">
-        <div className="flex items-center gap-3">
-          <Avatar className="h-10 w-10">
-            <AvatarFallback className="text-sm font-medium">
-              {getInitials(client.nome)}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1">
-            <CardTitle className="text-lg">{client.nome} {client.telefone && `(${client.telefone})`}</CardTitle>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Badge variant="outline" className="text-xs border-primary/30 text-primary">
-                {client.setor}
-              </Badge>
-              {client.email && (
-                <span className="text-xs">{client.email}</span>
-              )}
+      <CardHeader className="border-b border-border/60 bg-muted/20 px-6 py-4">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-start gap-3">
+            <Avatar className="h-12 w-12 border border-border">
+              <AvatarFallback className="text-base font-semibold">
+                {getInitials(client.nome)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="space-y-1">
+              <CardTitle className="text-xl font-semibold leading-tight">
+                {client.nome}
+              </CardTitle>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <Badge variant="outline" className="border-primary/30 bg-primary/10 text-primary">
+                  {client.setor}
+                </Badge>
+                {client.telefone && (
+                  <span className="flex items-center gap-1">
+                    <User className="h-3 w-3" />
+                    {client.telefone}
+                  </span>
+                )}
+                {client.email && (
+                  <span className="flex items-center gap-1">
+                    <Mail className="h-3 w-3" />
+                    {client.email}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <User className="h-3 w-3" />
-            <span>Online</span>
+          <div className="flex flex-col items-start gap-2 text-xs text-muted-foreground md:items-end">
+            <div className="flex items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-1 text-emerald-600 dark:text-emerald-300">
+              <User className="h-3 w-3" />
+              <span>Em atendimento</span>
+            </div>
+            {client.last_message_at && (
+              <div className="flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                <span>
+                  Última interação {formatDistanceToNow(new Date(client.last_message_at), {
+                    addSuffix: true,
+                    locale: ptBR
+                  })}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </CardHeader>
 
-      {/* Área de Mensagens */}
-      <CardContent className="flex-1 p-0 flex flex-col min-h-0">
-        <ScrollArea className="flex-1 p-4 max-h-[calc(100vh-300px)]">
-          {loading ? (
-            <div className="space-y-4">
-              {[...Array(3)].map((_, i) => (
-                <div key={i} className="animate-pulse">
-                  <div className={`flex ${i % 2 === 0 ? 'justify-start' : 'justify-end'}`}>
-                    <div className="max-w-[70%] space-y-2">
+      <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+        <div className="flex-1 overflow-hidden">
+          <ScrollArea className="h-full px-6 py-6">
+            {loading ? (
+              <div className="space-y-6">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className={`flex ${i % 2 === 0 ? 'justify-start' : 'justify-end'}`}>
+                    <div className="max-w-[70%] space-y-3">
                       <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 bg-muted rounded-full" />
-                        <div className="h-3 bg-muted rounded w-16" />
+                        <div className="h-6 w-6 rounded-full bg-muted animate-pulse" />
+                        <div className="h-3 w-20 rounded bg-muted animate-pulse" />
                       </div>
-                      <div className="h-16 bg-muted rounded-lg" />
+                      <div className="h-20 rounded-xl bg-muted animate-pulse" />
                     </div>
                   </div>
+                ))}
+              </div>
+            ) : messages.length === 0 ? (
+              <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-muted-foreground">
+                <MessageCircle className="h-10 w-10 opacity-50" />
+                <div className="space-y-1">
+                  <h4 className="text-base font-semibold">Inicie a conversa</h4>
+                  <p className="text-sm">
+                    Envie a primeira mensagem para {client.nome} e agilize o atendimento.
+                  </p>
                 </div>
+
               ))}
             </div>
           ) : messages.length === 0 ? (
@@ -429,16 +472,71 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                       {message.viewed_at && isFromAdmin && (
                         <div className="text-xs text-muted-foreground mt-1 text-right">
                           Lida
+
                         </div>
                       )}
-                    </div>
-                  </div>
-                );
-              })}
-              <div ref={messagesEndRef} />
+                      <div className={`flex ${isFromAdmin ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[72%] space-y-2 ${isFromAdmin ? 'text-right' : 'text-left'}`}>
+                          <div
+                            className={`inline-flex items-center gap-2 text-xs text-muted-foreground ${
+                              isFromAdmin ? 'justify-end' : 'justify-start'
+                            }`}
+                          >
+                            <Avatar className="h-6 w-6">
+                              <AvatarFallback className="text-[10px] font-medium">
+                                {isFromAdmin
+                                  ? getInitials(user?.username || user?.email || 'Você')
+                                  : getInitials(client.nome)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <span className="truncate">
+                              {isFromAdmin ? 'Você' : client.nome}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {formatDistanceToNow(new Date(message.created_at), {
+                                addSuffix: true,
+                                locale: ptBR
+                              })}
+                            </span>
+                          </div>
+
+                          <div
+                            className={`rounded-2xl border p-3 shadow-sm transition-all ${
+                              isFromAdmin
+                                ? 'ml-auto bg-primary text-primary-foreground border-primary/40 shadow-primary/30'
+                                : 'bg-background text-foreground'
+                            }`}
+                          >
+                            {renderMessageContent(message)}
+                          </div>
+
+                          {message.viewed_at && isFromAdmin && (
+                            <div className="text-xs text-muted-foreground">Lida</div>
+                          )}
+                        </div>
+                      </div>
+                    </React.Fragment>
+                  );
+                })}
+                <div ref={messagesEndRef} />
+              </div>
+            )}
+          </ScrollArea>
+        </div>
+
+        <div className="space-y-3 border-t border-border/60 bg-background/95 px-6 py-4">
+          {attachmentUploading && (
+            <div className="flex items-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/5 px-3 py-2 text-xs font-medium text-primary">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>
+                {attachmentUploading === 'file'
+                  ? 'Enviando arquivo...'
+                  : 'Enviando mensagem de áudio...'}
+              </span>
             </div>
           )}
-        </ScrollArea>
+
 
         {/* Área de Input */}
         <div className="p-4 border-t border-primary/20 bg-background">
@@ -477,11 +575,13 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 )}
               </Button>
             </div>
+
             <Textarea
               placeholder={`Enviar mensagem para ${client.nome}...`}
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               onKeyDown={handleKeyDown}
+
               className="min-h-[60px] resize-none"
               disabled={sending || attachmentUploading !== null}
             />
@@ -503,6 +603,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 </span>
               )}
               <span>{newMessage.length}/1000</span>
+
             </div>
           </div>
         </div>

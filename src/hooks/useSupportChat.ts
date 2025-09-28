@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/state/auth';
@@ -99,7 +99,7 @@ export function useSupportChat() {
   const [messagesLoading, setMessagesLoading] = useState(false);
 
   // Buscar clientes do admin
-  const fetchClients = async () => {
+  const fetchClients = useCallback(async () => {
     if (!user?.id || user.role !== 'admin') return;
 
     try {
@@ -160,10 +160,10 @@ export function useSupportChat() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast, user?.id, user?.role]);
 
   // Buscar mensagens entre admin e cliente
-  const fetchMessages = async (clientId: string) => {
+  const fetchMessages = useCallback(async (clientId: string) => {
     if (!user?.id) return;
 
     try {
@@ -226,10 +226,12 @@ export function useSupportChat() {
     } finally {
       setMessagesLoading(false);
     }
-  };
+  }, [toast, user?.id]);
 
   // Enviar mensagem
+
   const sendMessage = async (
+
     fromUserId: string,
     toUserId: string,
     content: SupportMessageContent
@@ -291,11 +293,11 @@ export function useSupportChat() {
       });
       return false;
     }
-  };
+  }, [toast]);
 
   useEffect(() => {
     fetchClients();
-  }, [user?.id]);
+  }, [fetchClients, user?.id]);
 
   // Configurar realtime para novas mensagens
   useEffect(() => {
