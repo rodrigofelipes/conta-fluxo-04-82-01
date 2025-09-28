@@ -1,7 +1,68 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/state/auth';
+import { Database } from '@/integrations/supabase/types';
+
+const SUPPORT_MESSAGE_PREFIX = '__support_payload__:';
+
+export type SupportMessageContent =
+  | {
+      type: 'text';
+      text: string;
+    }
+  | {
+      type: 'file';
+      url: string;
+      name: string;
+      size: number;
+      mimeType: string;
+    }
+  | {
+      type: 'audio';
+      url: string;
+      mimeType: string;
+      duration?: number;
+    };
+
+const serializeSupportMessageContent = (content: SupportMessageContent) => {
+  if (content.type === 'text') {
+    return content.text;
+  }
+
+  return `${SUPPORT_MESSAGE_PREFIX}${JSON.stringify(content)}`;
+};
+
+const parseSupportMessageContent = (message: string): SupportMessageContent => {
+  if (message.startsWith(SUPPORT_MESSAGE_PREFIX)) {
+    try {
+      const parsed = JSON.parse(message.replace(SUPPORT_MESSAGE_PREFIX, ''));
+      if (parsed?.type === 'file' || parsed?.type === 'audio') {
+        return parsed as SupportMessageContent;
+      }
+    } catch (error) {
+      console.error('Erro ao interpretar conteúdo da mensagem de suporte:', error);
+    }
+  }
+
+  return {
+    type: 'text',
+    text: message
+  };
+};
+
+const getMessagePreview = (content: SupportMessageContent) => {
+  switch (content.type) {
+    case 'file':
+      return `📎 ${content.name}`;
+    case 'audio':
+      return '🎤 Mensagem de áudio';
+    default:
+      return content.text;
+  }
+};
+
+type MessageRow = Database['public']['Tables']['messages']['Row'];
 
 export interface SupportClient {
   id: string;
@@ -21,6 +82,7 @@ export interface SupportMessage {
   from_user_id: string;
   to_user_id: string;
   message: string;
+  content: SupportMessageContent;
   created_at: string;
   viewed_at?: string;
   from_user_name?: string;
@@ -37,7 +99,7 @@ export function useSupportChat() {
   const [messagesLoading, setMessagesLoading] = useState(false);
 
   // Buscar clientes do admin
-  const fetchClients = async () => {
+  const fetchClients = useCallback(async () => {
     if (!user?.id || user.role !== 'admin') return;
 
     try {
@@ -56,9 +118,9 @@ export function useSupportChat() {
       const clientsWithMessages = await Promise.all(
         (clientsData || []).map(async (client) => {
           // Buscar última mensagem
-          const { data: lastMessage } = await supabase
-            .from('messages')
-            .select('message, created_at')
+      const { data: lastMessage } = await supabase
+        .from('messages')
+        .select('message, created_at')
             .or(`and(from_user_id.eq.${client.id},to_user_id.eq.${user.id}),and(from_user_id.eq.${user.id},to_user_id.eq.${client.id})`)
             .eq('message_type', 'internal')
             .order('created_at', { ascending: false })
@@ -74,9 +136,13 @@ export function useSupportChat() {
             .eq('message_type', 'internal')
             .is('viewed_at', null);
 
+          const parsedLastMessage = lastMessage
+            ? parseSupportMessageContent(lastMessage.message)
+            : undefined;
+
           return {
             ...client,
-            last_message: lastMessage?.message,
+            last_message: parsedLastMessage ? getMessagePreview(parsedLastMessage) : lastMessage?.message,
             last_message_at: lastMessage?.created_at,
             unread_count: unreadCount || 0
           };
@@ -94,10 +160,10 @@ export function useSupportChat() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast, user?.id, user?.role]);
 
   // Buscar mensagens entre admin e cliente
-  const fetchMessages = async (clientId: string) => {
+  const fetchMessages = useCallback(async (clientId: string) => {
     if (!user?.id) return;
 
     try {
@@ -122,6 +188,7 @@ export function useSupportChat() {
 
           return {
             ...msg,
+            content: parseSupportMessageContent(msg.message),
             message_type: 'internal' as const,
             from_user_name: fromUser.data?.full_name || fromUser.data?.username,
             to_user_name: toUser.data?.full_name || toUser.data?.username,
@@ -159,17 +226,23 @@ export function useSupportChat() {
     } finally {
       setMessagesLoading(false);
     }
-  };
+  }, [toast, user?.id]);
 
   // Enviar mensagem
-  const sendMessage = async (fromUserId: string, toUserId: string, content: string) => {
+  const sendMessage = useCallback(async (
+    fromUserId: string,
+    toUserId: string,
+    content: SupportMessageContent
+  ) => {
     try {
+      const serializedContent = serializeSupportMessageContent(content);
+
       const { data, error } = await supabase
         .from('messages')
         .insert({
           from_user_id: fromUserId,
           to_user_id: toUserId,
-          message: content,
+          message: serializedContent,
           message_type: 'internal'
         })
         .select('*')
@@ -183,8 +256,11 @@ export function useSupportChat() {
         supabase.from('profiles').select('username, full_name').eq('user_id', toUserId).single()
       ]);
 
+      const parsedContent = parseSupportMessageContent(data.message);
+
       const newMessage = {
         ...data,
+        content: parsedContent,
         message_type: 'internal' as const,
         from_user_name: fromUser.data?.full_name || fromUser.data?.username,
         to_user_name: toUser.data?.full_name || toUser.data?.username,
@@ -193,12 +269,12 @@ export function useSupportChat() {
       setMessages(prev => [...prev, newMessage]);
 
       // Atualizar última mensagem na lista de clientes
-      setClients(prev => 
-        prev.map(client => 
-          client.id === toUserId 
-            ? { 
-                ...client, 
-                last_message: content,
+      setClients(prev =>
+        prev.map(client =>
+          client.id === toUserId
+            ? {
+                ...client,
+                last_message: getMessagePreview(parsedContent),
                 last_message_at: new Date().toISOString()
               }
             : client
@@ -215,11 +291,11 @@ export function useSupportChat() {
       });
       return false;
     }
-  };
+  }, [toast]);
 
   useEffect(() => {
     fetchClients();
-  }, [user?.id]);
+  }, [fetchClients, user?.id]);
 
   // Configurar realtime para novas mensagens
   useEffect(() => {
@@ -236,21 +312,29 @@ export function useSupportChat() {
           filter: `message_type=eq.internal`
         },
         (payload) => {
-          const newMessage = payload.new as SupportMessage;
-          
+          const newMessageRow = payload.new as MessageRow;
+          const parsedContent = parseSupportMessageContent(newMessageRow.message);
+
           // Se a mensagem é para este admin, adicionar à lista
-          if (newMessage.to_user_id === user.id) {
-            setMessages(prev => [...prev, newMessage]);
-            
+          if (newMessageRow.to_user_id === user.id) {
+            setMessages(prev => [
+              ...prev,
+              {
+                ...newMessageRow,
+                content: parsedContent,
+                message_type: 'internal'
+              }
+            ]);
+
             // Atualizar contagem não lida do cliente
-            setClients(prev => 
-              prev.map(client => 
-                client.id === newMessage.from_user_id 
-                  ? { 
-                      ...client, 
+            setClients(prev =>
+              prev.map(client =>
+                client.id === newMessageRow.from_user_id
+                  ? {
+                      ...client,
                       unread_count: (client.unread_count || 0) + 1,
-                      last_message: newMessage.message,
-                      last_message_at: newMessage.created_at
+                      last_message: getMessagePreview(parsedContent),
+                      last_message_at: newMessageRow.created_at
                     }
                   : client
               )

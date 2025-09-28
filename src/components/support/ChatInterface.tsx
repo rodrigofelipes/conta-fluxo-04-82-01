@@ -5,17 +5,34 @@ import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Send, MessageCircle, User, Clock } from 'lucide-react';
-import { SupportClient, SupportMessage } from '@/hooks/useSupportChat';
+import {
+  Send,
+  MessageCircle,
+  User,
+  Clock,
+  Paperclip,
+  Mic,
+  Loader2,
+  FileText,
+  Download,
+  Mail
+} from 'lucide-react';
+import {
+  SupportClient,
+  SupportMessage,
+  SupportMessageContent
+} from '@/hooks/useSupportChat';
 import { useAuth } from '@/state/auth';
-import { formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow, isSameDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 interface ChatInterfaceProps {
   client: SupportClient | null;
   messages: SupportMessage[];
   loading: boolean;
-  onSendMessage: (content: string) => Promise<void>;
+  onSendMessage: (content: SupportMessageContent) => Promise<void>;
 }
 
 export const ChatInterface: React.FC<ChatInterfaceProps> = ({
@@ -25,9 +42,18 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   onSendMessage
 }) => {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
+  const [attachmentUploading, setAttachmentUploading] = useState<null | 'file' | 'audio'>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingIntervalRef = useRef<number | null>(null);
+  const recordingChunksRef = useRef<Blob[]>([]);
+  const maxCharacters = 1000;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -42,7 +68,10 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
     setSending(true);
     try {
-      await onSendMessage(newMessage);
+      await onSendMessage({
+        type: 'text',
+        text: newMessage
+      });
       setNewMessage('');
     } catch (error) {
       console.error('Erro ao enviar mensagem:', error);
@@ -67,6 +96,230 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       .slice(0, 2);
   };
 
+  const formatFileSize = (size: number) => {
+    if (size < 1024) return `${size} B`;
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const formatDuration = (duration?: number) => {
+    if (!duration) return null;
+    const minutes = Math.floor(duration / 60);
+    const seconds = duration % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const handleAttachmentUpload = async (
+    file: File,
+    type: 'file' | 'audio',
+    options?: { duration?: number }
+  ) => {
+    if (!client) return;
+
+    setAttachmentUploading(type);
+
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+      const filePath = `${client.id}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('support-files')
+        .upload(filePath, file, {
+          upsert: false
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData, error: publicUrlError } = supabase.storage
+        .from('support-files')
+        .getPublicUrl(filePath);
+
+      if (publicUrlError) throw publicUrlError;
+
+      const payload: SupportMessageContent =
+        type === 'file'
+          ? {
+              type: 'file',
+              url: publicUrlData.publicUrl,
+              name: file.name,
+              size: file.size,
+              mimeType: file.type
+            }
+          : {
+              type: 'audio',
+              url: publicUrlData.publicUrl,
+              mimeType: file.type,
+              duration: options?.duration
+            };
+
+      await onSendMessage(payload);
+      toast({
+        title: type === 'file' ? 'Arquivo enviado' : 'Áudio enviado',
+        description:
+          type === 'file'
+            ? 'O arquivo foi enviado com sucesso.'
+            : 'A mensagem de áudio foi enviada com sucesso.'
+      });
+    } catch (error: any) {
+      console.error('Erro ao enviar anexo:', error);
+      toast({
+        title: 'Erro ao enviar',
+        description: error.message || 'Não foi possível enviar o anexo.',
+        variant: 'destructive'
+      });
+    } finally {
+      setAttachmentUploading(null);
+    }
+  };
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files?.length) return;
+
+    for (const file of Array.from(files)) {
+      await handleAttachmentUpload(file, 'file');
+    }
+
+    event.target.value = '';
+  };
+
+  const stopRecordingTimer = () => {
+    if (recordingIntervalRef.current) {
+      window.clearInterval(recordingIntervalRef.current);
+      recordingIntervalRef.current = null;
+    }
+  };
+
+  const stopRecording = () => {
+    stopRecordingTimer();
+    mediaRecorderRef.current?.stop();
+    mediaRecorderRef.current = null;
+    setIsRecording(false);
+  };
+
+  const startRecording = async () => {
+    if (!client) return;
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      toast({
+        title: 'Gravação não suportada',
+        description: 'Seu navegador não suporta captura de áudio.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      recordingChunksRef.current = [];
+
+      recorder.addEventListener('dataavailable', (event) => {
+        if (event.data.size > 0) {
+          recordingChunksRef.current.push(event.data);
+        }
+      });
+
+      recorder.addEventListener('stop', async () => {
+        stream.getTracks().forEach(track => track.stop());
+        const blob = new Blob(recordingChunksRef.current, {
+          type: recorder.mimeType || 'audio/webm'
+        });
+
+        if (blob.size === 0) {
+          toast({
+            title: 'Gravação vazia',
+            description: 'Nenhum áudio foi capturado. Tente novamente.',
+            variant: 'destructive'
+          });
+          return;
+        }
+
+        const file = new File([blob], `gravacao-${Date.now()}.webm`, {
+          type: blob.type
+        });
+
+        await handleAttachmentUpload(file, 'audio', {
+          duration: recordingDuration
+        });
+
+        setRecordingDuration(0);
+      });
+
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+      setIsRecording(true);
+      setRecordingDuration(0);
+      recordingIntervalRef.current = window.setInterval(() => {
+        setRecordingDuration((prev) => prev + 1);
+      }, 1000);
+    } catch (error: any) {
+      console.error('Erro ao iniciar gravação de áudio:', error);
+      toast({
+        title: 'Erro na gravação',
+        description:
+          error.message || 'Não foi possível iniciar a gravação de áudio. Verifique as permissões.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (isRecording) {
+        stopRecording();
+      }
+      stopRecordingTimer();
+    };
+  }, [isRecording]);
+
+  const renderMessageContent = (message: SupportMessage) => {
+    switch (message.content.type) {
+      case 'file':
+        return (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              <div>
+                <p className="text-sm font-medium break-words">{message.content.name}</p>
+                <p className="text-xs text-muted-foreground">{formatFileSize(message.content.size)}</p>
+              </div>
+            </div>
+            <a
+              href={message.content.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              <Download className="h-3 w-3" /> Baixar arquivo
+            </a>
+          </div>
+        );
+      case 'audio':
+        return (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-sm">
+              <Mic className="h-4 w-4" />
+              <span>Mensagem de áudio</span>
+              {formatDuration(message.content.duration) && (
+                <span className="text-xs text-muted-foreground">
+                  {formatDuration(message.content.duration)}
+                </span>
+              )}
+            </div>
+            <audio controls src={message.content.url} className="w-full" preload="auto" />
+          </div>
+        );
+      default:
+        return (
+          <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+            {message.content.text}
+          </p>
+        );
+    }
+  };
+
   if (!client) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
@@ -82,138 +335,243 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   return (
     <>
       {/* Cabeçalho do Chat */}
-      <CardHeader className="pb-3 border-b border-primary/20">
-        <div className="flex items-center gap-3">
-          <Avatar className="h-10 w-10">
-            <AvatarFallback className="text-sm font-medium">
-              {getInitials(client.nome)}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1">
-            <CardTitle className="text-lg">{client.nome} {client.telefone && `(${client.telefone})`}</CardTitle>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Badge variant="outline" className="text-xs border-primary/30 text-primary">
-                {client.setor}
-              </Badge>
-              {client.email && (
-                <span className="text-xs">{client.email}</span>
-              )}
+      <CardHeader className="border-b border-border/60 bg-muted/20 px-6 py-4">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-start gap-3">
+            <Avatar className="h-12 w-12 border border-border">
+              <AvatarFallback className="text-base font-semibold">
+                {getInitials(client.nome)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="space-y-1">
+              <CardTitle className="text-xl font-semibold leading-tight">
+                {client.nome}
+              </CardTitle>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <Badge variant="outline" className="border-primary/30 bg-primary/10 text-primary">
+                  {client.setor}
+                </Badge>
+                {client.telefone && (
+                  <span className="flex items-center gap-1">
+                    <User className="h-3 w-3" />
+                    {client.telefone}
+                  </span>
+                )}
+                {client.email && (
+                  <span className="flex items-center gap-1">
+                    <Mail className="h-3 w-3" />
+                    {client.email}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <User className="h-3 w-3" />
-            <span>Online</span>
+          <div className="flex flex-col items-start gap-2 text-xs text-muted-foreground md:items-end">
+            <div className="flex items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-1 text-emerald-600 dark:text-emerald-300">
+              <User className="h-3 w-3" />
+              <span>Em atendimento</span>
+            </div>
+            {client.last_message_at && (
+              <div className="flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                <span>
+                  Última interação {formatDistanceToNow(new Date(client.last_message_at), {
+                    addSuffix: true,
+                    locale: ptBR
+                  })}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </CardHeader>
 
-      {/* Área de Mensagens */}
-      <CardContent className="flex-1 p-0 flex flex-col min-h-0">
-        <ScrollArea className="flex-1 p-4 max-h-[calc(100vh-300px)]">
-          {loading ? (
-            <div className="space-y-4">
-              {[...Array(3)].map((_, i) => (
-                <div key={i} className="animate-pulse">
-                  <div className={`flex ${i % 2 === 0 ? 'justify-start' : 'justify-end'}`}>
-                    <div className="max-w-[70%] space-y-2">
+      <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+        <div className="flex-1 overflow-hidden">
+          <ScrollArea className="h-full px-6 py-6">
+            {loading ? (
+              <div className="space-y-6">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className={`flex ${i % 2 === 0 ? 'justify-start' : 'justify-end'}`}>
+                    <div className="max-w-[70%] space-y-3">
                       <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 bg-muted rounded-full" />
-                        <div className="h-3 bg-muted rounded w-16" />
+                        <div className="h-6 w-6 rounded-full bg-muted animate-pulse" />
+                        <div className="h-3 w-20 rounded bg-muted animate-pulse" />
                       </div>
-                      <div className="h-16 bg-muted rounded-lg" />
+                      <div className="h-20 rounded-xl bg-muted animate-pulse" />
                     </div>
                   </div>
+                ))}
+              </div>
+            ) : messages.length === 0 ? (
+              <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-muted-foreground">
+                <MessageCircle className="h-10 w-10 opacity-50" />
+                <div className="space-y-1">
+                  <h4 className="text-base font-semibold">Inicie a conversa</h4>
+                  <p className="text-sm">
+                    Envie a primeira mensagem para {client.nome} e agilize o atendimento.
+                  </p>
                 </div>
-              ))}
-            </div>
-          ) : messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
-              <MessageCircle className="h-8 w-8 mb-3 opacity-50" />
-              <h4 className="font-medium mb-2">Inicie a conversa</h4>
-              <p className="text-sm">
-                Envie a primeira mensagem para {client.nome}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {messages.map((message) => {
-                const isFromAdmin = message.from_user_id === user?.id;
-                return (
-                  <div
-                    key={message.id}
-                    className={`flex ${isFromAdmin ? 'justify-end' : 'justify-start'}`}
-                  >
-                    <div className={`max-w-[70%] ${isFromAdmin ? 'order-2' : 'order-1'}`}>
-                      <div className={`flex items-center gap-2 mb-1 ${isFromAdmin ? 'justify-end' : 'justify-start'}`}>
-                        <Avatar className="h-6 w-6">
-                          <AvatarFallback className="text-xs">
-                            {isFromAdmin 
-                              ? getInitials(user?.username || 'A')
-                              : getInitials(client.nome)
-                            }
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className="text-xs text-muted-foreground">
-                          {isFromAdmin ? 'Você' : client.nome}
-                        </span>
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Clock className="h-3 w-3" />
-                          {formatDistanceToNow(new Date(message.created_at), {
-                            addSuffix: true,
-                            locale: ptBR
-                          })}
-                        </div>
-                      </div>
-                      
-                      <div
-                        className={`p-3 rounded-lg ${
-                          isFromAdmin
-                            ? 'bg-primary text-primary-foreground border border-primary/30'
-                            : 'bg-card border border-border'
-                        }`}
-                      >
-                        <p className="text-sm whitespace-pre-wrap break-words">
-                          {message.message}
-                        </p>
-                      </div>
-                      
-                      {message.viewed_at && isFromAdmin && (
-                        <div className="text-xs text-muted-foreground mt-1 text-right">
-                          Lida
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {messages.map((message, index) => {
+                  const isFromAdmin = message.from_user_id === user?.id;
+                  const previousMessage = messages[index - 1];
+                  const showDayDivider =
+                    !previousMessage ||
+                    !isSameDay(new Date(previousMessage.created_at), new Date(message.created_at));
+
+                  return (
+                    <React.Fragment key={message.id}>
+                      {showDayDivider && (
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                          <span className="h-px flex-1 bg-border" />
+                          <span>
+                            {format(new Date(message.created_at), "dd 'de' MMMM", { locale: ptBR })}
+                          </span>
+                          <span className="h-px flex-1 bg-border" />
                         </div>
                       )}
-                    </div>
-                  </div>
-                );
-              })}
-              <div ref={messagesEndRef} />
+                      <div className={`flex ${isFromAdmin ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[72%] space-y-2 ${isFromAdmin ? 'text-right' : 'text-left'}`}>
+                          <div
+                            className={`inline-flex items-center gap-2 text-xs text-muted-foreground ${
+                              isFromAdmin ? 'justify-end' : 'justify-start'
+                            }`}
+                          >
+                            <Avatar className="h-6 w-6">
+                              <AvatarFallback className="text-[10px] font-medium">
+                                {isFromAdmin
+                                  ? getInitials(user?.username || user?.email || 'Você')
+                                  : getInitials(client.nome)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <span className="truncate">
+                              {isFromAdmin ? 'Você' : client.nome}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {formatDistanceToNow(new Date(message.created_at), {
+                                addSuffix: true,
+                                locale: ptBR
+                              })}
+                            </span>
+                          </div>
+
+                          <div
+                            className={`rounded-2xl border p-3 shadow-sm transition-all ${
+                              isFromAdmin
+                                ? 'ml-auto bg-primary text-primary-foreground border-primary/40 shadow-primary/30'
+                                : 'bg-background text-foreground'
+                            }`}
+                          >
+                            {renderMessageContent(message)}
+                          </div>
+
+                          {message.viewed_at && isFromAdmin && (
+                            <div className="text-xs text-muted-foreground">Lida</div>
+                          )}
+                        </div>
+                      </div>
+                    </React.Fragment>
+                  );
+                })}
+                <div ref={messagesEndRef} />
+              </div>
+            )}
+          </ScrollArea>
+        </div>
+
+        <div className="space-y-3 border-t border-border/60 bg-background/95 px-6 py-4">
+          {attachmentUploading && (
+            <div className="flex items-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/5 px-3 py-2 text-xs font-medium text-primary">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>
+                {attachmentUploading === 'file'
+                  ? 'Enviando arquivo...'
+                  : 'Enviando mensagem de áudio...'}
+              </span>
             </div>
           )}
-        </ScrollArea>
 
-        {/* Área de Input */}
-        <div className="p-4 border-t border-primary/20 bg-background">
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              className="gap-2"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={sending || attachmentUploading !== null}
+            >
+              {attachmentUploading === 'file' ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Paperclip className="h-4 w-4" />
+              )}
+              <span className="hidden sm:inline">Anexar arquivo</span>
+            </Button>
+
+            <Button
+              type="button"
+              variant={isRecording ? 'destructive' : 'secondary'}
+              className="gap-2"
+              onClick={isRecording ? stopRecording : startRecording}
+              disabled={sending || attachmentUploading === 'file'}
+            >
+              {attachmentUploading === 'audio' ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Mic className={`h-4 w-4 ${isRecording ? 'animate-pulse' : ''}`} />
+              )}
+              <span>{isRecording ? 'Parar gravação' : 'Gravar áudio'}</span>
+            </Button>
+
+            {isRecording && (
+              <span className="flex items-center gap-1 rounded-full bg-destructive/10 px-3 py-1 text-xs font-semibold text-destructive">
+                <Mic className="h-3 w-3" />
+                Gravando... {formatDuration(recordingDuration)}
+              </span>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-background p-3 shadow-sm">
             <Textarea
               placeholder={`Enviar mensagem para ${client.nome}...`}
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               onKeyDown={handleKeyDown}
-              className="min-h-[60px] resize-none"
-              disabled={sending}
+              maxLength={maxCharacters}
+              className="min-h-[80px] w-full resize-none border-0 bg-transparent focus-visible:ring-0"
+              disabled={sending || attachmentUploading !== null}
             />
-            <Button
-              onClick={handleSendMessage}
-              disabled={!newMessage.trim() || sending}
-              size="lg"
-              className="px-4"
-            >
-              <Send className="h-4 w-4" />
-            </Button>
-          </div>
-          <div className="flex justify-between items-center mt-2 text-xs text-muted-foreground">
-            <span>Digite Enter para enviar, Shift+Enter para nova linha</span>
-            <span>{newMessage.length}/1000</span>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-xs text-muted-foreground">
+                Pressione <strong>Enter</strong> para enviar ou <strong>Shift + Enter</strong> para quebrar linha.
+              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-muted-foreground">
+                  {newMessage.length}/{maxCharacters}
+                </span>
+                <Button
+                  onClick={handleSendMessage}
+                  disabled={!newMessage.trim() || sending || attachmentUploading !== null}
+                  className="gap-2"
+                >
+                  {sending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                  Enviar mensagem
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       </CardContent>
