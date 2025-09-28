@@ -13,8 +13,6 @@ import { supabase } from '@/integrations/supabase/client';
 
 const getStatusBadge = (status: string) => {
   switch (status) {
-    case 'WAITING_DEPARTMENT':
-      return <Badge variant="secondary">Aguardando Departamento</Badge>;
     case 'CONVERSING':
       return <Badge variant="default">Em Conversa</Badge>;
     case 'ENDED':
@@ -33,7 +31,6 @@ interface ConversationDetailProps {
   conversation: WhatsAppConversation;
   onSendMessage: (message: string) => Promise<boolean>;
   onEndConversation: () => Promise<boolean>;
-  onResendMenu: () => Promise<boolean>;
   messages: any[];
   loading: boolean;
 }
@@ -42,14 +39,12 @@ const ConversationDetail: React.FC<ConversationDetailProps> = ({
   conversation,
   onSendMessage,
   onEndConversation,
-  onResendMenu,
   messages,
   loading
 }) => {
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [ending, setEnding] = useState(false);
-  const [resendingMenu, setResendingMenu] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const handleSendMessage = async () => {
@@ -69,11 +64,6 @@ const ConversationDetail: React.FC<ConversationDetailProps> = ({
     setEnding(false);
   };
 
-  const handleResendMenu = async () => {
-    setResendingMenu(true);
-    await onResendMenu();
-    setResendingMenu(false);
-  };
 
   // Scroll automático para baixo quando mensagens mudam
   const scrollToBottom = () => {
@@ -100,18 +90,6 @@ const ConversationDetail: React.FC<ConversationDetailProps> = ({
         </div>
         <div className="flex items-center gap-2">
           {getStatusBadge(conversation.status)}
-          
-          {conversation.status === 'WAITING_DEPARTMENT' && (
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={handleResendMenu}
-              disabled={resendingMenu}
-            >
-              <RefreshCw className={`h-4 w-4 mr-1 ${resendingMenu ? 'animate-spin' : ''}`} />
-              {resendingMenu ? 'Reenviando...' : 'Reenviar Menu'}
-            </Button>
-          )}
           
           {conversation.status === 'CONVERSING' && (
             <>
@@ -212,7 +190,7 @@ const ConversationDetail: React.FC<ConversationDetailProps> = ({
         )}
       </ScrollArea>
 
-      {(conversation.status === 'CONVERSING' || conversation.status === 'WAITING_DEPARTMENT') && (
+      {conversation.status === 'CONVERSING' && (
         <div className="p-4 border-t">
           <div className="flex gap-2">
             <Textarea
@@ -248,8 +226,7 @@ export const WhatsAppConversations: React.FC = () => {
     loading,
     fetchMessages,
     sendMessage,
-    endConversation,
-    resendMenu
+    endConversation
   } = useWhatsAppMessages();
 
   const [selectedConversation, setSelectedConversation] = useState<WhatsAppConversation | null>(null);
@@ -293,11 +270,6 @@ export const WhatsAppConversations: React.FC = () => {
     return success;
   };
 
-  const handleResendMenu = async () => {
-    if (!selectedConversation) return false;
-    
-    return await resendMenu(selectedConversation.id);
-  };
 
   if (loading) {
     return (
@@ -382,12 +354,6 @@ export const WhatsAppConversations: React.FC = () => {
                         </div>
                         
                         <div className="flex items-center justify-between">
-                          {conversation.selected_department && (
-                            <Badge variant="outline" className="text-xs">
-                              {getDepartmentLabel(conversation.selected_department)}
-                            </Badge>
-                          )}
-                          
                           <div className="flex items-center gap-1 text-xs text-muted-foreground">
                             <Clock className="h-3 w-3" />
                             {formatDistanceToNow(new Date(conversation.updated_at), {
@@ -414,7 +380,6 @@ export const WhatsAppConversations: React.FC = () => {
               conversation={selectedConversation}
               onSendMessage={handleSendMessage}
               onEndConversation={handleEndConversation}
-              onResendMenu={handleResendMenu}
               messages={messages}
               loading={messagesLoading}
             />

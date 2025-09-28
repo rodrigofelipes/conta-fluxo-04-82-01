@@ -19,24 +19,7 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-// Mapeamento de departamentos
-const DEPARTMENT_MAPPING: Record<string, string> = {
-  '1': 'COORDENACAO',
-  '2': 'CONTABIL', 
-  '3': 'FISCAL',
-  '4': 'PESSOAL',
-  '5': 'CADASTRO',
-  '0': 'COORDENACAO' // Fallback para coordenação
-};
-
-const MENU_MESSAGE = `Por gentileza, informe o número do departamento para o qual você deseja atendimento:
-
-1 - Coordenação
-2 - Contábil  
-3 - Fiscal
-4 - RH - Pessoal
-5 - Cadastro / Registro e Legalização
-0 - Não sei o departamento`;
+const WELCOME_MESSAGE = `Olá! Você está conectado ao nosso atendimento via WhatsApp. Um de nossos atendentes responderá em breve.`;
 
 // Função para normalizar telefone
 function normalizePhone(phone: string): string {
@@ -127,14 +110,86 @@ async function manageConversation(phoneNumber: string, message: string, webhookD
   if (!existingConversation || existingConversation.status === 'ENDED') {
     console.log('Iniciando nova conversa ou reativando conversa encerrada');
     
-    // Enviar menu de departamentos
-    const menuSent = await sendWhatsAppMessage(phoneNumber, MENU_MESSAGE, phoneNumberIdFromWebhook);
+    // Buscar cliente pelo telefone
+    const client = await findClientByPhone(phoneNumber);
+    
+    if (!client) {
+      console.log('Cliente não encontrado, registrando contato desconhecido');
+      
+      // Registrar contato desconhecido
+      await supabase.rpc('register_unknown_contact', {
+        phone_input: phoneNumber,
+        message_text: message
+      });
+      
+      await sendWhatsAppMessage(phoneNumber, 'Desculpe, não encontramos seu cadastro em nosso sistema. Um de nossos atendentes entrará em contato em breve.', phoneNumberIdFromWebhook);
+      
+      // Criar conversa mas marcar como encerrada
+      const conversationData = {
+        phone_number: phoneNumber,
+        normalized_phone: normalizedPhone,
+        status: 'ENDED',
+        updated_at: new Date().toISOString()
+      };
+
+      if (existingConversation) {
+        await supabase
+          .from('whatsapp_conversations')
+          .update(conversationData)
+          .eq('id', existingConversation.id);
+      } else {
+        await supabase
+          .from('whatsapp_conversations')
+          .insert(conversationData);
+      }
+      
+      return;
+    }
+
+    console.log('Cliente encontrado:', client);
+
+    // Buscar admin responsável pelo cliente ou qualquer admin disponível
+    let admin = null;
+    
+    // Primeiro tentar buscar admin responsável pelo cliente
+    if (client.admin_responsavel) {
+      const { data: responsibleAdmin } = await supabase
+        .from('profiles')
+        .select('username')
+        .eq('user_id', client.admin_responsavel)
+        .single();
+      
+      if (responsibleAdmin) {
+        admin = {
+          admin_id: client.admin_responsavel,
+          admin_username: responsibleAdmin.username
+        };
+      }
+    }
+    
+    // Se não encontrou admin responsável, buscar qualquer admin do setor do cliente
+    if (!admin) {
+      admin = await findAvailableAdmin(client.id, client.setor);
+    }
+    
+    if (!admin) {
+      console.log('Nenhum admin disponível');
+      await sendWhatsAppMessage(phoneNumber, 'No momento não temos atendentes disponíveis. Tente novamente mais tarde.', phoneNumberIdFromWebhook);
+      return;
+    }
+
+    console.log('Admin encontrado:', admin);
+
+    // Enviar mensagem de boas-vindas
+    const welcomeSent = await sendWhatsAppMessage(phoneNumber, WELCOME_MESSAGE, phoneNumberIdFromWebhook);
     
     // Criar ou atualizar conversa
     const conversationData = {
       phone_number: phoneNumber,
       normalized_phone: normalizedPhone,
-      status: 'WAITING_DEPARTMENT',
+      client_id: client.id,
+      admin_id: admin.admin_id,
+      status: 'CONVERSING',
       updated_at: new Date().toISOString()
     };
 
@@ -155,106 +210,26 @@ async function manageConversation(phoneNumber: string, message: string, webhookD
       conversationId = newConversation?.id;
     }
 
-    // Registrar menu enviado na tabela whatsapp_messages
-    if (menuSent && conversationId) {
+    // Registrar mensagem de boas-vindas na tabela whatsapp_messages
+    if (welcomeSent && conversationId) {
       await supabase
         .from('whatsapp_messages')
         .insert({
           conversation_id: conversationId,
-          admin_id: null,
+          admin_id: admin.admin_id,
           from_phone: WHATSAPP_DISPLAY_PHONE_NUMBER,
           to_phone: phoneNumber,
-          content: `[MENU INICIAL] ${MENU_MESSAGE}`,
+          content: WELCOME_MESSAGE,
           direction: 'outbound',
           message_type: 'text'
         });
     }
-    
-    return;
-  }
 
-  // Processar mensagem baseada no status da conversa
-  if (existingConversation.status === 'WAITING_DEPARTMENT') {
-    console.log('Processando seleção de departamento:', message);
-    
-    const selectedDepartment = DEPARTMENT_MAPPING[message.trim()];
-    
-    if (!selectedDepartment) {
-      const invalidMessage = 'Opção inválida. ' + MENU_MESSAGE;
-      const invalidSent = await sendWhatsAppMessage(phoneNumber, invalidMessage, phoneNumberIdFromWebhook);
-      
-      // Registrar mensagem de opção inválida
-      if (invalidSent) {
-        await supabase
-          .from('whatsapp_messages')
-          .insert({
-            conversation_id: existingConversation.id,
-            admin_id: null,
-            from_phone: WHATSAPP_DISPLAY_PHONE_NUMBER,
-            to_phone: phoneNumber,
-            content: `[OPÇÃO INVÁLIDA] ${invalidMessage}`,
-            direction: 'outbound',
-            message_type: 'text'
-          });
-      }
-      return;
-    }
-
-    console.log('Departamento selecionado:', selectedDepartment);
-
-    // Buscar cliente
-    const client = await findClientByPhone(phoneNumber);
-    
-    if (!client) {
-      console.log('Cliente não encontrado, registrando contato desconhecido');
-      
-      // Registrar contato desconhecido
-      await supabase.rpc('register_unknown_contact', {
-        phone_input: phoneNumber,
-        message_text: `Departamento: ${selectedDepartment} - ${message}`
-      });
-      
-      await sendWhatsAppMessage(phoneNumber, 'Desculpe, não encontramos seu cadastro em nosso sistema. Um de nossos atendentes entrará em contato em breve.');
-      
-      // Atualizar conversa para encerrada
-      await supabase
-        .from('whatsapp_conversations')
-        .update({ status: 'ENDED', updated_at: new Date().toISOString() })
-        .eq('id', existingConversation.id);
-      
-      return;
-    }
-
-    console.log('Cliente encontrado:', client);
-
-    // Buscar admin disponível
-    const admin = await findAvailableAdmin(client.id, selectedDepartment);
-    
-    if (!admin) {
-      console.log('Nenhum admin disponível para o departamento:', selectedDepartment);
-      await sendWhatsAppMessage(phoneNumber, 'Desculpe, no momento não temos atendentes disponíveis para este departamento. Tente novamente mais tarde.');
-      return;
-    }
-
-    console.log('Admin encontrado:', admin);
-
-    // Atualizar conversa
-    await supabase
-      .from('whatsapp_conversations')
-      .update({
-        client_id: client.id,
-        admin_id: admin.admin_id,
-        selected_department: selectedDepartment,
-        status: 'CONVERSING',
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', existingConversation.id);
-
-    // Criar mensagem no sistema interno
+    // Criar mensagem no sistema interno notificando o admin
     const messageData = {
       from_user_id: client.id,
       to_user_id: admin.admin_id,
-      message: `[WhatsApp] Cliente iniciou conversa no departamento ${selectedDepartment}`,
+      message: `[WhatsApp] Cliente iniciou conversa: ${message}`,
       from_user_name: client.nome,
       to_user_name: admin.admin_username,
       message_type: 'whatsapp'
@@ -262,20 +237,22 @@ async function manageConversation(phoneNumber: string, message: string, webhookD
 
     await supabase.from('messages').insert(messageData);
 
-    // Registrar mensagem WhatsApp
+    // Registrar primeira mensagem do cliente
     await supabase.from('whatsapp_messages').insert({
-      conversation_id: existingConversation.id,
+      conversation_id: conversationId,
       admin_id: admin.admin_id,
       from_phone: phoneNumber,
-      to_phone: phoneNumber, // Cliente para cliente (inbound)
-      content: `Departamento selecionado: ${selectedDepartment}`,
+      to_phone: phoneNumber,
+      content: message,
       direction: 'inbound',
       message_type: 'text'
     });
-
-    await sendWhatsAppMessage(phoneNumber, `Obrigado! Você foi conectado ao departamento de ${selectedDepartment}. Um atendente responderá em breve.`);
     
-  } else if (existingConversation.status === 'CONVERSING') {
+    return;
+  }
+
+  // Se a conversa já está ativa, processar mensagem normalmente
+  if (existingConversation.status === 'CONVERSING') {
     console.log('Encaminhando mensagem para admin');
     
     if (!existingConversation.client_id || !existingConversation.admin_id) {

@@ -43,7 +43,7 @@ export function useWhatsAppMessages() {
       const { data, error } = await supabase
         .from('whatsapp_conversations')
         .select('*')
-        .in('status', ['WAITING_DEPARTMENT', 'CONVERSING'])
+        .in('status', ['CONVERSING'])
         .order('updated_at', { ascending: false });
 
       if (error) throw error;
