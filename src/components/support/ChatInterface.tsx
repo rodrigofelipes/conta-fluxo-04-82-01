@@ -129,11 +129,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       if (uploadError) throw uploadError;
 
-      const { data: publicUrlData, error: publicUrlError } = supabase.storage
+      const { data: publicUrlData } = supabase.storage
         .from('support-files')
         .getPublicUrl(filePath);
 
-      if (publicUrlError) throw publicUrlError;
+      
 
       const payload: SupportMessageContent =
         type === 'file'
