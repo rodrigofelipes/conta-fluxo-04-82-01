@@ -14,8 +14,8 @@ import {
   Mic,
   Loader2,
   FileText,
-  Download,
-  Mail
+
+
 } from 'lucide-react';
 import {
   SupportClient,
@@ -53,7 +53,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingIntervalRef = useRef<number | null>(null);
   const recordingChunksRef = useRef<Blob[]>([]);
-  const maxCharacters = 1000;
+
+
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -131,11 +132,13 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       if (uploadError) throw uploadError;
 
-      const { data: publicUrlData, error: publicUrlError } = supabase.storage
+
+      const { data: publicUrlData } = supabase.storage
         .from('support-files')
         .getPublicUrl(filePath);
 
-      if (publicUrlError) throw publicUrlError;
+      
+
 
       const payload: SupportMessageContent =
         type === 'file'
@@ -313,7 +316,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         );
       default:
         return (
-          <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+
+          <p className="text-sm whitespace-pre-wrap break-words">
+
             {message.content.text}
           </p>
         );
@@ -412,25 +417,62 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     Envie a primeira mensagem para {client.nome} e agilize o atendimento.
                   </p>
                 </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {messages.map((message, index) => {
-                  const isFromAdmin = message.from_user_id === user?.id;
-                  const previousMessage = messages[index - 1];
-                  const showDayDivider =
-                    !previousMessage ||
-                    !isSameDay(new Date(previousMessage.created_at), new Date(message.created_at));
 
-                  return (
-                    <React.Fragment key={message.id}>
-                      {showDayDivider && (
-                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                          <span className="h-px flex-1 bg-border" />
-                          <span>
-                            {format(new Date(message.created_at), "dd 'de' MMMM", { locale: ptBR })}
-                          </span>
-                          <span className="h-px flex-1 bg-border" />
+              ))}
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
+              <MessageCircle className="h-8 w-8 mb-3 opacity-50" />
+              <h4 className="font-medium mb-2">Inicie a conversa</h4>
+              <p className="text-sm">
+                Envie a primeira mensagem para {client.nome}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {messages.map((message) => {
+                const isFromAdmin = message.from_user_id === user?.id;
+                return (
+                  <div
+                    key={message.id}
+                    className={`flex ${isFromAdmin ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div className={`max-w-[70%] ${isFromAdmin ? 'order-2' : 'order-1'}`}>
+                      <div className={`flex items-center gap-2 mb-1 ${isFromAdmin ? 'justify-end' : 'justify-start'}`}>
+                        <Avatar className="h-6 w-6">
+                          <AvatarFallback className="text-xs">
+                            {isFromAdmin 
+                              ? getInitials(user?.username || 'A')
+                              : getInitials(client.nome)
+                            }
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="text-xs text-muted-foreground">
+                          {isFromAdmin ? 'Você' : client.nome}
+                        </span>
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Clock className="h-3 w-3" />
+                          {formatDistanceToNow(new Date(message.created_at), {
+                            addSuffix: true,
+                            locale: ptBR
+                          })}
+                        </div>
+                      </div>
+                      
+                      <div
+                        className={`p-3 rounded-lg ${
+                          isFromAdmin
+                            ? 'bg-primary text-primary-foreground border border-primary/30'
+                            : 'bg-card border border-border'
+                        }`}
+                      >
+                        {renderMessageContent(message)}
+                      </div>
+
+                      {message.viewed_at && isFromAdmin && (
+                        <div className="text-xs text-muted-foreground mt-1 text-right">
+                          Lida
+
                         </div>
                       )}
                       <div className={`flex ${isFromAdmin ? 'justify-end' : 'justify-start'}`}>
@@ -495,82 +537,73 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             </div>
           )}
 
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              className="hidden"
-              onChange={handleFileChange}
-            />
-            <Button
-              type="button"
-              variant="outline"
-              className="gap-2"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={sending || attachmentUploading !== null}
-            >
-              {attachmentUploading === 'file' ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Paperclip className="h-4 w-4" />
-              )}
-              <span className="hidden sm:inline">Anexar arquivo</span>
-            </Button>
 
-            <Button
-              type="button"
-              variant={isRecording ? 'destructive' : 'secondary'}
-              className="gap-2"
-              onClick={isRecording ? stopRecording : startRecording}
-              disabled={sending || attachmentUploading === 'file'}
-            >
-              {attachmentUploading === 'audio' ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Mic className={`h-4 w-4 ${isRecording ? 'animate-pulse' : ''}`} />
-              )}
-              <span>{isRecording ? 'Parar gravação' : 'Gravar áudio'}</span>
-            </Button>
+        {/* Área de Input */}
+        <div className="p-4 border-t border-primary/20 bg-background">
+          <div className="flex gap-3 items-end">
+            <div className="flex flex-col gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={sending || attachmentUploading !== null}
+              >
+                {attachmentUploading === 'file' ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Paperclip className="h-4 w-4" />
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant={isRecording ? 'destructive' : 'outline'}
+                size="icon"
+                onClick={isRecording ? stopRecording : startRecording}
+                disabled={sending || attachmentUploading === 'file'}
+              >
+                {attachmentUploading === 'audio' ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Mic className={`h-4 w-4 ${isRecording ? 'animate-pulse' : ''}`} />
+                )}
+              </Button>
+            </div>
 
-            {isRecording && (
-              <span className="flex items-center gap-1 rounded-full bg-destructive/10 px-3 py-1 text-xs font-semibold text-destructive">
-                <Mic className="h-3 w-3" />
-                Gravando... {formatDuration(recordingDuration)}
-              </span>
-            )}
-          </div>
-
-          <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-background p-3 shadow-sm">
             <Textarea
               placeholder={`Enviar mensagem para ${client.nome}...`}
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               onKeyDown={handleKeyDown}
-              maxLength={maxCharacters}
-              className="min-h-[80px] w-full resize-none border-0 bg-transparent focus-visible:ring-0"
+
+              className="min-h-[60px] resize-none"
               disabled={sending || attachmentUploading !== null}
             />
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <span className="text-xs text-muted-foreground">
-                Pressione <strong>Enter</strong> para enviar ou <strong>Shift + Enter</strong> para quebrar linha.
-              </span>
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-muted-foreground">
-                  {newMessage.length}/{maxCharacters}
+            <Button
+              onClick={handleSendMessage}
+              disabled={!newMessage.trim() || sending || attachmentUploading !== null}
+              size="lg"
+              className="px-4"
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="flex flex-wrap justify-between items-center mt-2 text-xs text-muted-foreground gap-2">
+            <span>Digite Enter para enviar, Shift+Enter para nova linha</span>
+            <div className="flex items-center gap-3">
+              {isRecording && (
+                <span className="text-destructive font-medium">
+                  Gravando áudio... {formatDuration(recordingDuration)}
                 </span>
-                <Button
-                  onClick={handleSendMessage}
-                  disabled={!newMessage.trim() || sending || attachmentUploading !== null}
-                  className="gap-2"
-                >
-                  {sending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Send className="h-4 w-4" />
-                  )}
-                  Enviar mensagem
-                </Button>
-              </div>
+              )}
+              <span>{newMessage.length}/1000</span>
+
             </div>
           </div>
         </div>

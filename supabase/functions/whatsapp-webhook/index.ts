@@ -172,10 +172,23 @@ async function manageConversation(phoneNumber: string, message: string, webhookD
       admin = await findAvailableAdmin(client.id, client.setor);
     }
     
+    // Se não encontrou admin, usar o primeiro admin disponível ou criar uma conversa sem admin
     if (!admin) {
-      console.log('Nenhum admin disponível');
-      await sendWhatsAppMessage(phoneNumber, 'No momento não temos atendentes disponíveis. Tente novamente mais tarde.', phoneNumberIdFromWebhook);
-      return;
+      console.log('Nenhum admin específico encontrado, mas permitindo conversa');
+      // Buscar qualquer admin disponível
+      const { data: anyAdmin } = await supabase
+        .from('user_roles')
+        .select('user_id, username')
+        .eq('role', 'admin')
+        .limit(1)
+        .single();
+        
+      if (anyAdmin) {
+        admin = {
+          admin_id: anyAdmin.user_id,
+          admin_username: anyAdmin.username
+        };
+      }
     }
 
     console.log('Admin encontrado:', admin);
