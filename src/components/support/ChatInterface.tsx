@@ -340,7 +340,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   return (
     <>
       {/* Cabeçalho do Chat */}
-      <CardHeader className="border-b border-border/60 bg-muted/20 px-6 py-4">
+      <CardHeader className="flex-shrink-0 border-b border-border/60 bg-muted/20 px-6 py-4">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-start gap-3">
             <Avatar className="h-12 w-12 border border-border">
@@ -391,8 +391,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         </div>
       </CardHeader>
 
-      <CardContent className="flex min-h-0 flex-1 flex-col p-0">
-        <div className="flex-1 overflow-hidden">
+      <CardContent className="flex flex-col min-h-0 flex-1 p-0">
+        <div className="flex-1 min-h-0 overflow-hidden">
           <ScrollArea className="h-full px-6 py-6">
             {loading ? (
               <div className="space-y-6">
@@ -474,7 +474,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           </ScrollArea>
         </div>
 
-        <div className="space-y-3 border-t border-border/60 bg-background/95 px-6 py-4">
+        <div className="flex-shrink-0 space-y-3 border-t border-border/60 bg-background/95 px-6 py-4">
           {attachmentUploading && (
             <div className="flex items-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/5 px-3 py-2 text-xs font-medium text-primary">
               <Loader2 className="h-4 w-4 animate-spin" />

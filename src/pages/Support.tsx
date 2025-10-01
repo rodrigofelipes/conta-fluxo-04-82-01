@@ -58,17 +58,16 @@ export default function Support() {
   );
 
   return (
-    <main className="min-h-screen flex flex-col bg-muted/20">
-      <div className="px-4 pt-4 sm:px-6 lg:px-8 lg:pt-6">
+    <main className="h-screen flex flex-col bg-muted/20 overflow-hidden">
+      <div className="flex-shrink-0 px-4 pt-4 sm:px-6 lg:px-8 lg:pt-6">
         <PageHeader
           title="Central de Suporte"
           subtitle="Gerencie as conversas com clientes, envie anexos e mensagens de áudio com praticidade."
-          className="flex-shrink-0"
         />
       </div>
 
-      <section className="flex-1 min-h-0 px-4 pb-6 sm:px-6 lg:px-8">
-        <div className="mx-auto flex h-full max-w-[1400px] flex-col gap-6">
+      <section className="flex-1 min-h-0 px-4 pb-6 sm:px-6 lg:px-8 overflow-auto">
+        <div className="mx-auto max-w-[1400px] h-full flex flex-col gap-6">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Card className="bg-background/80 backdrop-blur">
               <CardContent className="flex items-center gap-3 py-5">
@@ -122,8 +121,8 @@ export default function Support() {
             </Card>
           </div>
 
-          <div className="grid flex-1 gap-6 overflow-hidden lg:grid-cols-[360px_1fr]">
-            <Card className="flex h-full flex-col overflow-hidden">
+          <div className="grid gap-6 lg:grid-cols-[360px_1fr]" style={{ height: 'calc(100vh - 500px)', minHeight: '500px' }}>
+            <Card className="flex flex-col overflow-hidden h-full">
               <ClientList
                 clients={clients}
                 loading={loading}
@@ -132,7 +131,7 @@ export default function Support() {
               />
             </Card>
 
-            <Card className="flex h-full flex-col overflow-hidden">
+            <Card className="flex flex-col overflow-hidden h-full">
               <ChatInterface
                 client={selectedClient}
                 messages={messages}

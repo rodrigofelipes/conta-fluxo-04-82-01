@@ -53,10 +53,10 @@ export const ClientList: React.FC<ClientListProps> = ({
   if (loading) {
     return (
       <>
-        <CardHeader className="pb-3">
+        <CardHeader className="flex-shrink-0 pb-3 border-b">
           <CardTitle className="text-lg">Clientes</CardTitle>
         </CardHeader>
-        <CardContent className="flex-1">
+        <CardContent className="flex-1 min-h-0 p-4">
           <div className="space-y-3">
             {[...Array(5)].map((_, i) => (
               <div key={i} className="animate-pulse">
@@ -77,7 +77,7 @@ export const ClientList: React.FC<ClientListProps> = ({
 
   return (
     <>
-      <CardHeader className="pb-3">
+      <CardHeader className="flex-shrink-0 pb-3 border-b">
         <CardTitle className="text-lg flex items-center justify-between">
           Clientes ({clients.length})
           {clients.some(c => c.unread_count && c.unread_count > 0) && (
@@ -86,7 +86,7 @@ export const ClientList: React.FC<ClientListProps> = ({
             </Badge>
           )}
         </CardTitle>
-        <div className="relative">
+        <div className="relative mt-3">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Buscar clientes..."
@@ -97,7 +97,7 @@ export const ClientList: React.FC<ClientListProps> = ({
         </div>
       </CardHeader>
 
-      <CardContent className="flex-1 p-0">
+      <CardContent className="flex-1 min-h-0 p-0">
         <ScrollArea className="h-full">
           {filteredClients.length === 0 ? (
             <div className="p-6 text-center text-muted-foreground">
