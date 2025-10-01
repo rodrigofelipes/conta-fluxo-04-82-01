@@ -229,9 +229,7 @@ export function useSupportChat() {
   }, [toast, user?.id]);
 
   // Enviar mensagem
-
-  const sendMessage = async (
-
+  const sendMessage = useCallback(async (
     fromUserId: string,
     toUserId: string,
     content: SupportMessageContent

@@ -14,8 +14,8 @@ import {
   Mic,
   Loader2,
   FileText,
-
-
+  Download,
+  Mail,
 } from 'lucide-react';
 import {
   SupportClient,
@@ -417,17 +417,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     Envie a primeira mensagem para {client.nome} e agilize o atendimento.
                   </p>
                 </div>
-
-              ))}
-            </div>
-          ) : messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
-              <MessageCircle className="h-8 w-8 mb-3 opacity-50" />
-              <h4 className="font-medium mb-2">Inicie a conversa</h4>
-              <p className="text-sm">
-                Envie a primeira mensagem para {client.nome}
-              </p>
-            </div>
+              </div>
           ) : (
             <div className="space-y-4">
               {messages.map((message) => {
@@ -472,51 +462,10 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                       {message.viewed_at && isFromAdmin && (
                         <div className="text-xs text-muted-foreground mt-1 text-right">
                           Lida
-
                         </div>
                       )}
-                      <div className={`flex ${isFromAdmin ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[72%] space-y-2 ${isFromAdmin ? 'text-right' : 'text-left'}`}>
-                          <div
-                            className={`inline-flex items-center gap-2 text-xs text-muted-foreground ${
-                              isFromAdmin ? 'justify-end' : 'justify-start'
-                            }`}
-                          >
-                            <Avatar className="h-6 w-6">
-                              <AvatarFallback className="text-[10px] font-medium">
-                                {isFromAdmin
-                                  ? getInitials(user?.username || user?.email || 'Você')
-                                  : getInitials(client.nome)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <span className="truncate">
-                              {isFromAdmin ? 'Você' : client.nome}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <Clock className="h-3 w-3" />
-                              {formatDistanceToNow(new Date(message.created_at), {
-                                addSuffix: true,
-                                locale: ptBR
-                              })}
-                            </span>
-                          </div>
-
-                          <div
-                            className={`rounded-2xl border p-3 shadow-sm transition-all ${
-                              isFromAdmin
-                                ? 'ml-auto bg-primary text-primary-foreground border-primary/40 shadow-primary/30'
-                                : 'bg-background text-foreground'
-                            }`}
-                          >
-                            {renderMessageContent(message)}
-                          </div>
-
-                          {message.viewed_at && isFromAdmin && (
-                            <div className="text-xs text-muted-foreground">Lida</div>
-                          )}
-                        </div>
-                      </div>
-                    </React.Fragment>
+                    </div>
+                  </div>
                   );
                 })}
                 <div ref={messagesEndRef} />
@@ -537,9 +486,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             </div>
           )}
 
-
-        {/* Área de Input */}
-        <div className="p-4 border-t border-primary/20 bg-background">
           <div className="flex gap-3 items-end">
             <div className="flex flex-col gap-2">
               <input
